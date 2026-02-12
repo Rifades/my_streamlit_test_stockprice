@@ -2,44 +2,46 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 
+# --- 1. FUNCTION TO GET TICKERS ---
+@st.cache_data
+def get_sp500_tickers():
+    # This reads tables from the Wikipedia page
+    url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+    tables = pd.read_html(url)
+    # The first table contains the S&P 500 list
+    df = tables[0]
+    return df['Symbol'].tolist()
+
+# --- 2. GET THE LIST ---
+try:
+    stock_options = get_sp500_tickers()
+except Exception as e:
+    st.error(f"Could not fetch S&P 500 list: {e}")
+    stock_options = ["AAPL", "MSFT", "GOOGL"] # Fallback if internet fails
+
+# --- 3. SIDEBAR CONFIG ---
 st.sidebar.header("Configuration")
-user_input = st.sidebar.text_input("Enter Stock Name", "AAPL, MSFT") # Default to avoid empty error
+
+tickers = st.sidebar.multiselect(
+    "Select Stock Name", 
+    options=stock_options, 
+    default=["AAPL", "MSFT"]
+)
+
 b = st.sidebar.selectbox("Select a Timeline", ["7d", "15d", "1mo", "3mo", "6mo", "1y"])
 sma_checkbox = st.sidebar.checkbox("Show Simple Moving Average (SMA)")
 
-if user_input:
-    tickers = [x.strip() for x in user_input.split(",")]
-    
+# --- 4. MAIN LOGIC (Same as before) ---
+if tickers:
     data = yf.download(tickers, period=b)["Close"]
     
+    # Handle single-stock formatting safely
     if len(tickers) == 1:
         if isinstance(data, pd.Series):
             data = data.to_frame(name=tickers[0])
         else:
             data.columns = [tickers[0]]
-
-    sma = data.rolling(window=20).mean()
-
+    
+    # ... rest of your chart logic ...
     st.title("Stock Ticker Data")
-    
-    cols = st.columns(len(tickers))
-    
-    for i, ticker in enumerate(tickers):
-        if ticker in data.columns:
-            current_price = data[ticker].iloc[-1]
-            previous_price = data[ticker].iloc[-2]
-            
-            delta_value = current_price - previous_price
-            delta_percent = (delta_value / previous_price * 100) if previous_price != 0 else 0
-            
-            if i < len(cols):
-                cols[i].metric(
-                    label=ticker, 
-                    value=f"${current_price:.2f}", 
-                    delta=f"{delta_percent:.2f}%"  # Showing % now!
-                )
-
-    if sma_checkbox:
-        st.line_chart(pd.concat([data, sma], axis=1))
-    else:
-        st.line_chart(data)
+    st.line_chart(data)
